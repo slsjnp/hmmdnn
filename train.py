@@ -190,16 +190,17 @@ class TrainSystem(pl.LightningModule):
         ])
         target_transform = transforms.Compose([transforms.ToTensor()])
         if imgs_dir is not None and masks_dir is not None:
+            dataset = LfwaDataset(imgs_dir=imgs_dir, transform=transform, target_transform=target_transform)
             # dataset = BaseDataset(imgs_dir=imgs_dir, masks_dir=masks_dir, transform=transform,
             #                       target_transform=target_transform)
-            dataset = ChaoDataset(imgs_dir=self.hparams.imgs_dir, masks_dir=self.hparams.masks_dir, transform=transform,
-                                  target_transform=target_transform)
-        else:
+            # dataset = ChaoDataset(imgs_dir=self.hparams.imgs_dir, masks_dir=self.hparams.masks_dir, transform=transform,
+            #                       target_transform=target_transform)
+        # else:
             # transform should be given by class hparams
             # dataset = BaseDataset(imgs_dir=self.hparams.imgs_dir, masks_dir=self.hparams.masks_dir, transform=transform,
             #                       target_transform=target_transform)
-            dataset = ChaoDataset(imgs_dir=self.hparams.imgs_dir, masks_dir=self.hparams.masks_dir, transform=transform,
-                                  target_transform=target_transform)
+            # dataset = ChaoDataset(imgs_dir=self.hparams.imgs_dir, masks_dir=self.hparams.masks_dir, transform=transform,
+            #                       target_transform=target_transform)
         n_val = int(len(dataset) * self.hparams.val_percent)
         n_train = len(dataset) - n_val
         self.n_train = n_train

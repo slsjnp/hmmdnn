@@ -101,7 +101,14 @@ def gauss_img_xys(x_std, s_std, myfactor, myscale):
 
 
 class Conv2d(nn.Module):
-    def __init__(self, in_ch, out_ch, strides, activation='relu', padding='valid')
+    def __init__(self, in_ch, out_ch, strides, activation='relu', padding='valid'):
+        if activation=='relu':
+            self.conv = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, kernel_size, strides=strides, padding=padding),
+                nn.ReLU(inplace=True),
+            )
+    def forward(x):
+        return self.conv(x)
 
 
 class Hmmcnn(nn.Module):
@@ -110,6 +117,7 @@ class Hmmcnn(nn.Module):
                  out_ch,
                  std,
                  scale_factors,
+                 numfix=3,
                  fixnoise_std=3.,  # additive noise to fixation locations
                  fix_mask_std=4.,  # fixation FOV (mask) size in standard deviationss
                  fix_scale_std=0.25,  # scale mask size in standard deviations
@@ -132,12 +140,10 @@ class Hmmcnn(nn.Module):
             "fix_mask_std": fix_mask_std,
             "fixnoise_std": fixnoise_std,
             "fix_scale_std": fix_scale_std,
-            "init_roistd": init_roistd,
-            "init_scalestd": init_scalestd,
-            "reg_centerbias": reg_centerbias,
+            "init_roistd": init_roistd, "init_scalestd": init_scalestd, "reg_centerbias": reg_centerbias,
             "reg_scalebias": reg_scalebias,
             "reg_scalebias_center": reg_scalebias_center,
-            "dataaug_imgnoise": dataaug_imgnoise,
+            "dataaug_imgnoise": dataaug_imgnoise, "numfix": numfix,
 
         }
         self.MODEL_ms = len(scale_factors)
@@ -167,6 +173,26 @@ class Hmmcnn(nn.Module):
                                                self.param['scale_factors'][scale], scale)
             self.gauss_img_xys.append(tmp)
 
+        # conv 
+        self.conv1_1 = Conv2d(in_ch=1, out_ch=8, activation='relu')
+        self.conv1_2 = Conv2d(in_ch=1, out_ch=8, activation='relu')
+        self.conv1_3 = Conv2d(in_ch=1, out_ch=8, activation='relu')
+
+        # conv 
+        self.conv2_1 = Conv2d(in_ch=8, out_ch=8, activation='relu')
+        self.conv2_2 = Conv2d(in_ch=8, out_ch=8, activation='relu')
+        self.conv2_3 = Conv2d(in_ch=8, out_ch=8, activation='relu')
+
+
+        self.class_dense1 = nn.Linear(24, 1)
+        self.class_dense1_relu = nn.ReLU(inplace=True)
+
+        self.class_dense2 = nn.Linear(24, 1)
+        self.class_dense2_relu = nn.ReLU(inplace=True)
+
+        self.class_dense3 = nn.Linear(24, 1)
+        self.class_dense3_relu = nn.ReLU(inplace=True)
+
     def forward(self, input):
         normal_s1 = normal_samples1(input, 0, 3.)
         fix1 = self.fix1_dense1(normal_s1)
@@ -193,6 +219,7 @@ class Hmmcnn(nn.Module):
         fix3s = self.fix3_dense2(normal_s3_1)
 
         # apply multi-scale masking for each fixation
+        # 按不同尺寸输入
         input_img = []
         for scale in range(self.MODEL_ms):
             tmp = Input(shape=(1, self.param['bbox_ms'][scale][0], self.param['bbox_ms'][scale][1]))
@@ -203,31 +230,86 @@ class Hmmcnn(nn.Module):
             tmp = gaussian_noise(input_img[scale])
             input_mask.append(tmp)
         # gaussian mask
+        # 三个尺寸， 三个位置 共9张
         mask1_img_ms = []
         mask2_img_ms = []
         mask3_img_ms = []
         for scale in range(self.MODEL_ms):
-            tmp1 = self.guass_img_xys[scale](input_mask, fix1n, fix1s)
+            tmp1 = self.guass_img_xys[scale](input_mask[scale], fix1n, fix1s)
             mask1_img_ms.append(tmp1)
 
-            tmp2 = self.guass_img_xys[scale](input_mask, fix2n, fix2s)
+            tmp2 = self.guass_img_xys[scale](input_mask[scale], fix2n, fix2s)
             mask2_img_ms.append(tmp2)
 
-            tmp3 = self.guass_img_xys[scale](input_mask, fix3n, fix3s)
+            tmp3 = self.guass_img_xys[scale](input_mask[scale], fix3n, fix3s)
             mask3_img_ms.append(tmp3)
 
-        conv1_ms = []
-        conv2_ms = []
-        conv3_ms = []
+        # fix0 1 2
+        conv1_1_ms = []
+        conv1_2_ms = []
+        conv1_3_ms = []
+
+        # 每个尺寸都卷积
         for scale in range(self.MODEL_ms):
-            tmp1 = self.[scale](input_mask, fix1n, fix1s)
-            mask1_img_ms.append(tmp1)
+            tmp1 = self.conv1_1(mask1_img_ms[scale], fix1n, fix1s)
+            conv1_1_ms.append(tmp1)
 
-            tmp2 = self.[scale](input_mask, fix2n, fix2s)
-            mask2_img_ms.append(tmp2)
+            tmp2 = self.conv1_2(mask2_img_ms[scale], fix2n, fix2s)
+            conv1_2_ms.append(tmp2)
 
-            tmp3 = self.[scale](input_mask, fix3n, fix3s)
-            mask3_img_ms.append(tmp3)
+            tmp3 = self.conv1_3(mask3_img_ms[scale], fix3n, fix3s)
+            conv1_3_ms.append(tmp3)
+
+        conv2_1_ms = []
+        conv2_2_ms = []
+        conv2_3_ms = []
+        for scale in range(self.MODEL_ms):
+            tmp1 = self.conv2_1(conv1_1_ms[scale], fix1n, fix1s)
+            conv2_1_ms.append(tmp1)
+
+            tmp2 = self.conv2_2(conv1_1_ms[scale], fix2n, fix2s)
+            conv2_2_ms.append(tmp2)
+
+            tmp3 = self.conv2_3(conv1_1_ms[scale], fix3n, fix3s)
+            conv2_3_ms.append(tmp3)
+
+        # aggregate remaining using max
+        L_aggi_ms = [[None for i in range(self.param['scale_factors'])] for j in range(self.param['numfix'])]
+        L_aggi_ms[0] = [conv2_1_ms[0], conv2_2_ms[1], conv2_3_ms[2]]
+        for index in range(1, self.param['numfix']):
+            for scale in range(self.param['scale_factors']):
+                L_aggi_ms[index][scale] = torch.Maximum(eval('conv2_' + str(index))[scale], 
+                                                        eval('conv2_' + str(index+1))[scale])
+        
+        # multiscale fatten and concatenate into a giant feature vector
+        L_maski_F_ms = [[None for i in range(self.param['scale_factors'])] for j in range(self.param['numfix'])]
+        L_maski_F = [None for i in range(self.param['numfix'])]
+        for i in range(self.param['numfix']):
+            for scale in range(self.param['scale_factors']):
+                L_maski_F_ms = torch.flatten(L_aggi_ms[i][scale])
+
+            if self.param['scale_factors'] == 1:
+                L_maski_F[i] = L_maski_F_ms[i][0]
+            else:
+                L_maski_F[i] = torch.cat([L_maski_F_ms[i][j] for j in range(self.param['scale_factors'])], 1)
+
+        # face classifier(share layers)
+        fci = []
+        for scale in range(self.param['scale_factors'])
+            d1 = eval('self.class_dense'+str(scale+1))(L_maski_F[scale])
+            tmp = eval('self.class_dense'+str(scale+1)+'relu')(L_maski_F[scale])
+            fci.append(tmp)
+        
+
+
+
+
+
+
+
+
+        
+
 
 
 

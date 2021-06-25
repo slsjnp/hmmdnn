@@ -149,6 +149,26 @@ class ChaoDataset(BaseDataset):
             'image': self.transform(img).float(),
             'mask': self.target_transform(mask).float()
         }
+class LfwaDataset:
+    def __init__(self, imgs_dir, transform, target_transform, mask_suffix='', Base=True):
+        # super(LfwaDataset, self).__init__(self, imgs_dir, masks_dir, transform, target_transform, mask_suffix='', Base=True)
+        fname = 'self.imgs_dir'
+        with open(fname + '.pkl', 'rb') as f:
+            alldata = pickle.load(f)
+        scale_factors = alldata['scale_factors']
+        bbox_ms = alldata['bbox_ms']
+        numclasses = alldata['numclasses']
+        #Y = alldata['Y']
+        #Xim_ms = alldata['Xim_ms']
+        vtrainI_ms = alldata['vtrainI_ms']
+        validI_ms = alldata['validI_ms']
+        vtrainYb = alldata['vtrainYb']
+        validYb = alldata['validYb']
+        arch_cnn = (8,16)
+        arch_fc = (40,)
+        batchsize = 20
+        fixnoise_std = 3.
+        scalenoise_std = 0.
 
 
 def train_dataloader(train_data_list, batch_size, ar=None):
