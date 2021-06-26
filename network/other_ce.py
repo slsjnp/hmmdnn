@@ -75,12 +75,11 @@ def gauss_img_xys(x_std, s_std, myfactor, myscale):
     # Masking function; the input is the image and xys location of the Gaussian
     def mask_func(tensors):
         img, xy, s = tensors
-        img_shape = K.shape(img)
+        img_shape = img.shape
         # Make indexing arrays
-        xx = K.arange(img_shape[3], dtype=img.dtype)
-        yy = K.arange(img_shape[2], dtype=img.dtype)
+        xx = torch.arange(img_shape[3], dtype=img.dtype)
+        yy = torch.arange(img_shape[2], dtype=img.dtype)
         # Get coordinates
-        xy = K.cast(xy, img.dtype)
         x = xy[:, 0:1] * myfactor  # change to downscaled coordinates
         y = xy[:, 1:2] * myfactor
         # make scale multiplier
@@ -89,25 +88,28 @@ def gauss_img_xys(x_std, s_std, myfactor, myscale):
         dist_x = (xx - x) / x_std
         dist_y = (yy - y) / x_std
         # Make full mask
-        mask = K.expand_dims(dist_x * dist_x, 1) + K.expand_dims(dist_y * dist_y, 2) + K.expand_dims(dist_s * dist_s, 2)
-        mask = K.exp(-0.5 * mask)
+        mask = torch.unsqueeze(dist_x * dist_x, 1) + torch.unsqueeze(dist_y * dist_y, 2) + torch.unsqueeze(
+            dist_s * dist_s, 2)
+        mask = torch.exp(-0.5 * mask)
         # Add channels dimension
-        mask = K.expand_dims(mask, 1)
+        mask = torch.unsqueeze(mask, 1)
         # Multiply image and mask
-        mask = K.cast(mask, img.dtype)
+        # mask = K.cast(mask, img.dtype)
         return img * mask
 
     return mask_func
 
 
 class Conv2d(nn.Module):
-    def __init__(self, in_ch, out_ch, strides, activation='relu', padding='valid'):
-        if activation=='relu':
+    def __init__(self, in_ch, out_ch, kernel_size, strides=1, activation='relu', padding='valid'):
+        super(Conv2d, self).__init__()
+        if activation == 'relu':
             self.conv = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, kernel_size, strides=strides, padding=padding),
+                nn.Conv2d(in_ch, out_ch, kernel_size, stride=strides, padding=padding),
                 nn.ReLU(inplace=True),
             )
-    def forward(x):
+
+    def forward(self, x):
         return self.conv(x)
 
 
@@ -170,30 +172,30 @@ class Hmmcnn(nn.Module):
         self.gauss_img_xys = []
         for scale in range(self.MODEL_ms):
             tmp = gauss_img_xys(self.param['fix_mask_std'], self.param['fix_scale_std'],
-                                               self.param['scale_factors'][scale], scale)
+                                self.param['scale_factors'][scale], scale)
             self.gauss_img_xys.append(tmp)
 
         # conv 
-        self.conv1_1 = Conv2d(in_ch=1, out_ch=8, activation='relu')
-        self.conv1_2 = Conv2d(in_ch=1, out_ch=8, activation='relu')
-        self.conv1_3 = Conv2d(in_ch=1, out_ch=8, activation='relu')
+        self.conv1_1 = Conv2d(in_ch=1, out_ch=8, kernel_size=3, activation='relu')
+        self.conv1_2 = Conv2d(in_ch=1, out_ch=8, kernel_size=3, activation='relu')
+        self.conv1_3 = Conv2d(in_ch=1, out_ch=8, kernel_size=3, activation='relu')
 
         # conv 
-        self.conv2_1 = Conv2d(in_ch=8, out_ch=8, activation='relu')
-        self.conv2_2 = Conv2d(in_ch=8, out_ch=8, activation='relu')
-        self.conv2_3 = Conv2d(in_ch=8, out_ch=8, activation='relu')
+        self.conv2_1 = Conv2d(in_ch=8, out_ch=16, kernel_size=3, activation='relu')
+        self.conv2_2 = Conv2d(in_ch=8, out_ch=16, kernel_size=3, activation='relu')
+        self.conv2_3 = Conv2d(in_ch=8, out_ch=16, kernel_size=3, activation='relu')
 
-
-        self.class_dense1 = nn.Linear(24, 1)
+        self.class_dense1 = nn.Linear(48, 1)
         self.class_dense1_relu = nn.ReLU(inplace=True)
 
-        self.class_dense2 = nn.Linear(24, 1)
+        self.class_dense2 = nn.Linear(48, 1)
         self.class_dense2_relu = nn.ReLU(inplace=True)
 
-        self.class_dense3 = nn.Linear(24, 1)
+        self.class_dense3 = nn.Linear(48, 1)
         self.class_dense3_relu = nn.ReLU(inplace=True)
 
-    def forward(self, input):
+    def forward(self, input1, input2, input3):
+        input = input1
         normal_s1 = normal_samples1(input, 0, 3.)
         fix1 = self.fix1_dense1(normal_s1)
         fix1 = self.fix1_dense1_relu(fix1)
@@ -220,10 +222,10 @@ class Hmmcnn(nn.Module):
 
         # apply multi-scale masking for each fixation
         # 按不同尺寸输入
-        input_img = []
-        for scale in range(self.MODEL_ms):
-            tmp = Input(shape=(1, self.param['bbox_ms'][scale][0], self.param['bbox_ms'][scale][1]))
-            input_img.append(tmp)
+        input_img = [input1, input2, input3]
+        # for scale in range(self.MODEL_ms):
+        #     tmp = Input(shape=(1, self.param['bbox_ms'][scale][0], self.param['bbox_ms'][scale][1]))
+        #     input_img.append(tmp)
         # gaussianNoise
         input_mask = []
         for scale in range(self.MODEL_ms):
@@ -278,9 +280,9 @@ class Hmmcnn(nn.Module):
         L_aggi_ms[0] = [conv2_1_ms[0], conv2_2_ms[1], conv2_3_ms[2]]
         for index in range(1, self.param['numfix']):
             for scale in range(self.param['scale_factors']):
-                L_aggi_ms[index][scale] = torch.Maximum(eval('conv2_' + str(index))[scale], 
-                                                        eval('conv2_' + str(index+1))[scale])
-        
+                L_aggi_ms[index][scale] = torch.maximum(eval('conv2_' + str(index))[scale],
+                                                        eval('conv2_' + str(index + 1))[scale])
+
         # multiscale fatten and concatenate into a giant feature vector
         L_maski_F_ms = [[None for i in range(self.param['scale_factors'])] for j in range(self.param['numfix'])]
         L_maski_F = [None for i in range(self.param['numfix'])]
@@ -295,23 +297,7 @@ class Hmmcnn(nn.Module):
 
         # face classifier(share layers)
         fci = []
-        for scale in range(self.param['scale_factors'])
-            d1 = eval('self.class_dense'+str(scale+1))(L_maski_F[scale])
-            tmp = eval('self.class_dense'+str(scale+1)+'relu')(L_maski_F[scale])
+        for scale in range(self.param['scale_factors']):
+            d1 = eval('self.class_dense' + str(scale + 1))(L_maski_F[scale])
+            tmp = eval('self.class_dense' + str(scale + 1) + 'relu')(L_maski_F[scale])
             fci.append(tmp)
-        
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-

@@ -4,11 +4,12 @@ from pytorch_lightning.loggers import TestTubeLogger
 import torch.nn as nn
 from sklearn.metrics import confusion_matrix
 # from eval.confusion_matrix import base_confusion
-from network.ce_net import CEnet
-from network.unet import Unet
+# from network.ce_net import CEnet
+# from network.unet import Unet
+from network.other_ce import Hmmcnn
 from opt import get_opts
 from utils import load_ckpt
-from dataset.dataset import train_dataloader, ChaoDataset
+from dataset.dataset import train_dataloader, ChaoDataset, LfwaDataset
 
 import pytorch_lightning as pl
 from torch import optim
@@ -36,9 +37,10 @@ class TrainSystem(pl.LightningModule):
         #                   )
         # self.model = Unet(1, 1)
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        self.model = CEnet()
-        self.criterion = nn.CrossEntropyLoss() if self.model.n_classes > 1 else nn.BCELoss()
-
+        # self.model = CEnet()
+        self.model = Hmmcnn(1, 1, 0.5, [1, 0.5, 0.25])
+        # self.criterion = nn.CrossEntropyLoss() if self.model.n_classes > 1 else nn.BCELoss()
+        self.criterion = nn.CrossEntropyLoss()
         self.epoch_loss = 0
         self.val = {}
         self.iou_sum = 0
@@ -189,8 +191,8 @@ class TrainSystem(pl.LightningModule):
             # transforms.Normalize(0.5, 0.5)
         ])
         target_transform = transforms.Compose([transforms.ToTensor()])
-        if imgs_dir is not None and masks_dir is not None:
-            dataset = LfwaDataset(imgs_dir=imgs_dir, transform=transform, target_transform=target_transform)
+        # if imgs_dir is not None and masks_dir is not None:
+        dataset = LfwaDataset(imgs_dir=self.hparams.imgs_dir, transform=transform, target_transform=target_transform)
             # dataset = BaseDataset(imgs_dir=imgs_dir, masks_dir=masks_dir, transform=transform,
             #                       target_transform=target_transform)
             # dataset = ChaoDataset(imgs_dir=self.hparams.imgs_dir, masks_dir=self.hparams.masks_dir, transform=transform,

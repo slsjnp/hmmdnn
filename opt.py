@@ -28,9 +28,7 @@ def get_opts():
                         choices=['params', 'model'],
                         help='which type to load .pth')
     parser.add_argument('--imgs_dir', type=str,
-                        # default='/home/sj/workspace/m/MA_NET/LITS/train/train_small/',
-                        default='/opt/data/private/data/chao_data/Train_Sets/',
-                        # default='/home/sj/workspace/data/chao_data/Train_Sets/',
+                        default='/home/sj/workspace/my_git/hmm/data/lfwa_small3_ms_C50',
                         help='image directory of history dataset')
     parser.add_argument('--masks_dir', type=str,
                         # default='/home/sj/workspace/m/MA_NET/LITS/train/target_small/',
