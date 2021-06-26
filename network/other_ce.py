@@ -55,7 +55,7 @@ def gaussian_noise(DATA_augnoise):
 
 def _normal_sample(shape, device, dtype, loc, stddev):
     # tmp = dt.normal.Normal(loc=loc, scale=stddev)
-    tmp = torch.empty(shape, device=device, dtype=dtype).normal(loc, stddev)
+    tmp = torch.empty(shape, device=device, dtype=dtype).normal_(loc, stddev)
     return tmp
 
 
@@ -194,7 +194,9 @@ class Hmmcnn(nn.Module):
         self.class_dense3 = nn.Linear(48, 1)
         self.class_dense3_relu = nn.ReLU(inplace=True)
 
-    def forward(self, input1, input2, input3):
+    def forward(self, input):
+
+        input1, input2, input3 = input
         input = input1
         normal_s1 = normal_samples1(input, 0, 3.)
         fix1 = self.fix1_dense1(normal_s1)

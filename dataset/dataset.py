@@ -151,25 +151,115 @@ class ChaoDataset(BaseDataset):
             'mask': self.target_transform(mask).float()
         }
 class LfwaDataset:
-    def __init__(self, imgs_dir, transform, target_transform, mask_suffix='', Base=True):
+    def __init__(self, imgs_dir, transform, target_transform, mask_suffix=''):
         # super(LfwaDataset, self).__init__(self, imgs_dir, masks_dir, transform, target_transform, mask_suffix='', Base=True)
         fname = imgs_dir
         with open(fname + '.pkl', 'rb') as f:
             alldata = pickle.load(f)
-        scale_factors = alldata['scale_factors']
-        bbox_ms = alldata['bbox_ms']
-        numclasses = alldata['numclasses']
-        #Y = alldata['Y']
-        #Xim_ms = alldata['Xim_ms']
-        vtrainI_ms = alldata['vtrainI_ms']
-        validI_ms = alldata['validI_ms']
-        vtrainYb = alldata['vtrainYb']
-        validYb = alldata['validYb']
-        arch_cnn = (8,16)
-        arch_fc = (40,)
-        batchsize = 20
-        fixnoise_std = 3.
-        scalenoise_std = 0.
+        self.alldata = alldata
+        '''将标签转换成one-hot vector'''
+        y = torch.from_numpy(alldata['Y'])
+        self.Yb = torch.nn.functional.one_hot(y)
+        self.transform = transform
+        self.target_transform = target_transform
+        self.mask_suffix = mask_suffix
+
+    def __len__(self):
+        return len(self.alldata['Y'])
+        # scale_factors = alldata['scale_factors']
+        # bbox_ms = alldata['bbox_ms']
+        # numclasses = alldata['numclasses']
+        # Y = alldata['Y']
+        # Xim_ms = alldata['Xim_ms']
+
+    @classmethod
+    def preprocess(cls, pil_img, scale=1):
+        w, h = pil_img.size
+        newW, newH = int(scale * w), int(scale * h)
+        assert newH > 0 and newW > 0, f'Scale is too small'
+        pil_img = pil_img.resize((newW, newH))
+        img_nd = np.array(pil_img)
+        # ensure img_nd is three dim as (h, w, c)
+        if len(img_nd.shape) == 2:
+            img_nd = np.expand_dims(img_nd, axis=2)
+        # transpose to c, h ,w
+        # img_trans = img_nd.transpose((2, 0, 1))
+        img_trans = img_nd
+        if img_trans.max() > 1:
+            img_trans = img_trans / 255
+        return img_trans.astype(np.float64)
+
+    def __getitem__(self, i):
+        alldata = self.alldata
+        # Xim_ms = None
+        Yb = None
+        Xim = [None for i in range(3)]
+        # if 'vtrainI_ms' in alldata.keys():
+        #     # extract data 提取出数据
+        #     vtrainI_ms = alldata['vtrainI_ms']
+        #     validI_ms = alldata['validI_ms']
+        #     vtrainYb = alldata['vtrainYb']
+        #     validYb = alldata['validYb']
+        #
+        #     print(vtrainI_ms[0].shape)
+        #     print(vtrainI_ms[1].shape)
+        #     print(vtrainI_ms[2].shape)
+        #     print(validI_ms[0].shape)
+        #     print(validI_ms[1].shape)
+        #     print(validI_ms[2].shape)
+        #     print(vtrainYb.shape)
+        #     print(validYb.shape)
+
+        # the data pkl does not contain training/validation sets
+        # so we need to make them first.
+        '''数据.PKL不区分训练/验证集, 所以需要先划分训练集和验证集'''
+        if 'Xim_ms' in alldata.keys():
+            # build on CV set
+            # Y = alldata['Y'][i]  # 人脸类别的标签 0, 1, 2, ...
+            Xim_ms = self.alldata['Xim_ms']  # 图片
+
+
+
+            # Yb = self.Yb[i]
+            # Yb = to_categorical(Y)
+            print(Xim_ms[0].shape)  # 图片有三个尺寸
+            print(Xim_ms[1].shape)
+            print(Xim_ms[2].shape)
+
+            # shuffle the data (since it is in order by class)
+            '''Shuffle数据(因为它是按类排序的)--要使每次分的batch都不同'''
+            # random.seed(123)
+            inds1 = i - 1
+            Yb = self.Yb[inds1]
+            Xim[0] = Xim_ms[0][inds1].transpose(1, 2, 0)
+            Xim[1] = Xim_ms[1][inds1].transpose(1, 2, 0)
+            Xim[2] = Xim_ms[2][inds1].transpose(1, 2, 0)
+            print(Xim[0].shape)
+            print(Xim[1].shape)
+            print(Xim[2].shape)
+            print(Yb.shape)
+
+        # img = self.preprocess(Xim_ms)
+        # mask = self.preprocess(mask, self.scale)
+        a = self.transform(Xim[0]).float()
+        return {
+            'image': [self.transform(Xim[0]).float(),
+                      self.transform(Xim[1]).float(),
+                      self.transform(Xim[2]).float()],
+            'mask': Yb,
+            # 'mask': self.target_transform(Yb).float()
+        }
+
+        # make stacked output
+        # vtrainYb_ms = [vtrainYb, vtrainYb, vtrainYb]  # 因为人脸图有三个不同的尺寸，所以标签重复了三次
+        # validsetI3_ms = (validI_ms, [validYb, validYb, validYb])
+
+
+        # arch_cnn = (8,16)
+        # arch_fc = (40,)
+        # batchsize = 20
+        # fixnoise_std = 3.
+        # scalenoise_std = 0.
 
 
 
@@ -194,9 +284,9 @@ def train_dataloader(train_data_list, batch_size, ar=None):
 
 
     if ar is None:
-        result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=True, num_workers=4,
+        result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=True, num_workers=0,
                             pin_memory=True)
     else:
-        result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=False, num_workers=4,
+        result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=False, num_workers=0,
                             pin_memory=True, drop_last=True)
     return result
