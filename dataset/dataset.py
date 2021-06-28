@@ -6,6 +6,7 @@ import numpy as np
 import os
 from glob import glob
 
+import skimage
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
@@ -150,6 +151,8 @@ class ChaoDataset(BaseDataset):
             'image': self.transform(img).float(),
             'mask': self.target_transform(mask).float()
         }
+
+
 class LfwaDataset:
     def __init__(self, imgs_dir, transform, target_transform, mask_suffix=''):
         # super(LfwaDataset, self).__init__(self, imgs_dir, masks_dir, transform, target_transform, mask_suffix='', Base=True)
@@ -158,8 +161,9 @@ class LfwaDataset:
             alldata = pickle.load(f)
         self.alldata = alldata
         '''将标签转换成one-hot vector'''
-        y = torch.from_numpy(alldata['Y'])
-        self.Yb = torch.nn.functional.one_hot(y)
+        # y = torch.from_numpy(alldata['Y'])
+        # self.Yb_onehot = torch.nn.functional.one_hot(y)
+        self.Yb = torch.from_numpy(alldata['Y'])
         self.transform = transform
         self.target_transform = target_transform
         self.mask_suffix = mask_suffix
@@ -218,29 +222,34 @@ class LfwaDataset:
             # Y = alldata['Y'][i]  # 人脸类别的标签 0, 1, 2, ...
             Xim_ms = self.alldata['Xim_ms']  # 图片
 
-
-
             # Yb = self.Yb[i]
             # Yb = to_categorical(Y)
-            print(Xim_ms[0].shape)  # 图片有三个尺寸
-            print(Xim_ms[1].shape)
-            print(Xim_ms[2].shape)
+            # print(Xim_ms[0].shape)  # 图片有三个尺寸
+            # print(Xim_ms[1].shape)
+            # print(Xim_ms[2].shape)
 
             # shuffle the data (since it is in order by class)
             '''Shuffle数据(因为它是按类排序的)--要使每次分的batch都不同'''
             # random.seed(123)
             inds1 = i - 1
             Yb = self.Yb[inds1]
+            # Xim[0] = skimage.util.random_noise(Xim_ms[0][inds1], mode='gaussian', seed=None, clip=True).transpose(1, 2,
+            #                                                                                                       0)
+            # Xim[1] = skimage.util.random_noise(Xim_ms[1][inds1], mode='gaussian', seed=None, clip=True).transpose(1, 2,
+            #                                                                                                       0)
+            # Xim[2] = skimage.util.random_noise(Xim_ms[2][inds1], mode='gaussian', seed=None, clip=True).transpose(1, 2,
+            #                                                                                                       0)
             Xim[0] = Xim_ms[0][inds1].transpose(1, 2, 0)
             Xim[1] = Xim_ms[1][inds1].transpose(1, 2, 0)
             Xim[2] = Xim_ms[2][inds1].transpose(1, 2, 0)
-            print(Xim[0].shape)
-            print(Xim[1].shape)
-            print(Xim[2].shape)
-            print(Yb.shape)
+            # print(Xim[0].shape)
+            # print(Xim[1].shape)
+            # print(Xim[2].shape)
+            # print(Yb.shape)
 
         # img = self.preprocess(Xim_ms)
         # mask = self.preprocess(mask, self.scale)
+
         a = self.transform(Xim[0]).float()
         return {
             'image': [self.transform(Xim[0]).float(),
@@ -254,13 +263,11 @@ class LfwaDataset:
         # vtrainYb_ms = [vtrainYb, vtrainYb, vtrainYb]  # 因为人脸图有三个不同的尺寸，所以标签重复了三次
         # validsetI3_ms = (validI_ms, [validYb, validYb, validYb])
 
-
         # arch_cnn = (8,16)
         # arch_fc = (40,)
         # batchsize = 20
         # fixnoise_std = 3.
         # scalenoise_std = 0.
-
 
 
 def train_dataloader(train_data_list, batch_size, ar=None):
@@ -272,7 +279,6 @@ def train_dataloader(train_data_list, batch_size, ar=None):
     :return: Dataloader
     """
 
-
     # if ar is None:
     #     result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=True, num_workers=16,
     #                         pin_memory=True)
@@ -280,8 +286,6 @@ def train_dataloader(train_data_list, batch_size, ar=None):
     #     result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=False, num_workers=16,
     #                         pin_memory=True, drop_last=True)
     # return result
-
-
 
     if ar is None:
         result = DataLoader(dataset=train_data_list, batch_size=batch_size, shuffle=True, num_workers=0,

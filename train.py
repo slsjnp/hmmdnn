@@ -38,7 +38,7 @@ class TrainSystem(pl.LightningModule):
         # self.model = Unet(1, 1)
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # self.model = CEnet()
-        self.model = Hmmcnn(1, 1, 0.5, [1, 0.5, 0.25])
+        self.model = Hmmcnn(1, 1, 0.5, [1, 0.5, 0.25], 100)
         # self.criterion = nn.CrossEntropyLoss() if self.model.n_classes > 1 else nn.BCELoss()
         self.criterion = nn.CrossEntropyLoss()
         self.epoch_loss = 0
@@ -74,9 +74,11 @@ class TrainSystem(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         x, y = batch.values()
-        y_hat = self.forward(x)
-
-        loss = self.criterion(y_hat, y)
+        y_hat_list = self.forward(x)
+        loss1 = self.criterion(y_hat_list[0], y)
+        loss2 = self.criterion(y_hat_list[1], y)
+        loss3 = self.criterion(y_hat_list[2], y)
+        loss = loss1 * 0.5 + loss2 * 1.0 + loss3 * 1.2
         # loss.backward()
         # loss = calc_loss(y_hat, y)
 
@@ -88,11 +90,11 @@ class TrainSystem(pl.LightningModule):
         return {'loss': loss, 'log': tensorboard_logs}
 
     def on_train_epoch_end(self, outputs) -> None:
-        for tag, value in self.model.named_parameters():
-            tag = tag.replace('.', '/')
+        # for tag, value in self.model.named_parameters():
+        #     tag = tag.replace('.', '/')
             # new
-            self.logger.experiment.add_histogram('weights' + tag, value.data.cpu().numpy(), self.global_step)
-            self.logger.experiment.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), self.global_step)
+            # self.logger.experiment.add_histogram('weights' + tag, value.data.cpu().numpy(), self.global_step)
+            # self.logger.experiment.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), self.global_step)
         super(TrainSystem, self).on_train_epoch_end(outputs)
 
     def on_validation_epoch_start(self):
@@ -107,12 +109,18 @@ class TrainSystem(pl.LightningModule):
         }
 
     def validation_step(self, batch, batch_idx):
+        x, y = batch.values()
+        y_hat_list = self.forward(x)
+        loss1 = self.criterion(y_hat_list[0], y)
+        loss2 = self.criterion(y_hat_list[1], y)
+        loss3 = self.criterion(y_hat_list[2], y)
+        loss = loss1 * 0.5 + loss2 * 1.0 + loss3 * 1.2
 
-        img, label = batch.values()
-        output = self.forward(img)
-        loss = self.criterion(output, label)
+        # img, label = batch.values()
+        # output = self.forward(img)
+        # loss = self.criterion(output, label)
         log = {'val_loss': loss}
-        perd = output > 0.5
+        perd = y_hat_list[0] > 0.5
 
         ################################################################################################################
         eps = 0.0001
@@ -122,6 +130,7 @@ class TrainSystem(pl.LightningModule):
         #
         # dice = (2 * inter.float() + eps) / union.float()
         # confusion_matrix
+        label = nn.functional.one_hot(y, 100)
         tn, fp, fn, tp = confusion_matrix(y_true=label.view(-1).cpu(),
                                           y_pred=perd.float().view(-1).cpu()).ravel()
 
@@ -148,10 +157,10 @@ class TrainSystem(pl.LightningModule):
         f1 = 2 * ppv * tpr / (ppv + tpr + eps)
         self.val['F1'] += f1
         ################################################################################################################
-        self.logger.experiment.add_images('images', img, self.global_step)
-        if self.model.n_classes == 1:
-            self.logger.experiment.add_images('masks/true', label, self.global_step)
-            self.logger.experiment.add_images('masks/pred', output > 0.5, self.global_step)
+        # self.logger.experiment.add_images('images', img, self.global_step)
+        # if self.model.n_classes == 1:
+        #     self.logger.experiment.add_images('masks/true', label, self.global_step)
+        #     self.logger.experiment.add_images('masks/pred', output > 0.5, self.global_step)
 
         return {'log': log}
 
@@ -162,7 +171,7 @@ class TrainSystem(pl.LightningModule):
         # self.log('iou', val_score, on_step=False, on_epoch=True)
         self.sdu.step(val_score)
         self.log('learning_rate', self.optimizers().param_groups[0]['lr'], on_step=False, on_epoch=True)
-        if self.model.n_classes > 1:
+        if self.n_classes > 1:
             # lg.info('validation cross entropy: {}'.format(val_score))
             self.log('Dice/test/epoch', self.val['DICE'] * percent / self.n_val, on_step=False, on_epoch=True)
             self.log('IOU', val_score, on_step=False, on_epoch=True)
