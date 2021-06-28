@@ -1,1 +1,0 @@
-{"name": "cecc-net-train", "version": 3, "tags_path": "./logs/cecc-net-train/version_3/meta_tags.csv", "metrics_path": "./logs/cecc-net-train/version_3/metrics.csv", "autosave": false, "description": null, "created_at": "2021-06-26 09:19:53.539369", "exp_hash": "cecc-net-train_v3"}

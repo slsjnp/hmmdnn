@@ -24,7 +24,7 @@ class TrainSystem(pl.LightningModule):
         self.hparams = param
         self.n_train = None
         self.n_val = None
-        self.n_classes = 1
+        self.n_classes = 100
         self.n_channels = 1
         ###############################################################################################
         # if network is unet then must use F.binary_cross_entropy_with_logits
@@ -38,9 +38,9 @@ class TrainSystem(pl.LightningModule):
         # self.model = Unet(1, 1)
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # self.model = CEnet()
-        self.model = Hmmcnn(1, 1, 0.5, [1, 0.5, 0.25], 100)
-        # self.criterion = nn.CrossEntropyLoss() if self.model.n_classes > 1 else nn.BCELoss()
-        self.criterion = nn.CrossEntropyLoss()
+        self.model = Hmmcnn(1, 1, 0.5, [1, 0.5, 0.25], self.n_classes)
+        self.criterion = nn.CrossEntropyLoss() if self.n_classes > 1 else nn.BCELoss()
+        # self.criterion = nn.CrossEntropyLoss()
         self.epoch_loss = 0
         self.val = {}
         self.iou_sum = 0
@@ -79,6 +79,7 @@ class TrainSystem(pl.LightningModule):
         loss2 = self.criterion(y_hat_list[1], y)
         loss3 = self.criterion(y_hat_list[2], y)
         loss = loss1 * 0.5 + loss2 * 1.0 + loss3 * 1.2
+        pred = y_hat_list[0] > 0.5
         # loss.backward()
         # loss = calc_loss(y_hat, y)
 
@@ -196,7 +197,7 @@ class TrainSystem(pl.LightningModule):
         transform = transforms.Compose([
             transforms.ToTensor(),
             # transforms.Normalize((-1.5,), (1.0,))
-            transforms.Normalize((0.5,), (0.5,))
+            # transforms.Normalize((0.5,), (0.5,))
             # transforms.Normalize(0.5, 0.5)
         ])
         target_transform = transforms.Compose([transforms.ToTensor()])
